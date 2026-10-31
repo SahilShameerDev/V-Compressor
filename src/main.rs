@@ -11,7 +11,40 @@ struct Args {
     encode: String,
 }
 
-fn get_info(input:String) -> Result<String, String> {
+fn one_pass(input:&str, bitrate:f64) {
+    let max = bitrate + (bitrate/8.0);
+    let buf = bitrate * 2.0;
+
+    let bits = format!("{:.0}k", bitrate / 1000.0);
+    let maxbits = format!("{:.0}k", max / 1000.0);
+    let bufsize = format!("{:.0}k", buf / 1000.0);
+
+    println!("Bits: {}, maxbits: {}, bufsize: {}", bits, maxbits, bufsize);
+    let status = match Command::new("ffmpeg")
+        .args([
+            "-y", "-i", &input,
+            "-c:v", "h264_nvenc",
+            "-preset", "p4",
+            "-b:v", &bits,
+            "-maxrate", &maxbits,
+            "-bufsize", &bufsize,
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "output1.mp4",
+        ]).status() {
+            Ok(status) => status,
+            Err(error) => {
+                eprintln!("Failed 1 pass: {error}");
+                return;
+            }
+        };
+}
+
+fn two_pass(input:&str, bitrate:f64) {
+    println!("2pass");
+}
+
+fn get_info(input:&str) -> Result<String, String> {
     let output = match Command::new("ffprobe")
         .args([
             "-v", "error",
@@ -21,7 +54,7 @@ fn get_info(input:String) -> Result<String, String> {
         ]).output() {
             Ok(output) => output,
             Err(error) => {
-                eprintln!("Could not run ffprobe: {error}");
+               eprintln!("Could not run ffprobe: {error}");
                 return Err("ffprobe failed".to_string());
             }
         };
@@ -49,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(Path::new(&args.input).exists(), "File given doesn't exist");
 
     // Get media duration with ffprobe
-    let output = get_info(args.input)?;
+    let output = get_info(&args.input)?;
     let duration: f64 = output.parse()?;
 
     println!("Duration: {} seconds", duration);
@@ -68,6 +101,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Target bits: {}bps, Total Bitrate: {}bps, Video Bitrate: {}bps", target_bits, bps, video_bitrate);
 
     // Check if its fast or exact
+    match args.encode.as_str() {
+        "fast" => {
+            one_pass(&args.input, video_bitrate);
+        },
+        "exact" => {
+            two_pass(&args.input, video_bitrate);
+        },
+        &_ => todo!(),
+    }
     //  -> Fast : Do one pass encoding
     //  -> Exact : Do two pass encoding
 
