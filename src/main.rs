@@ -41,7 +41,35 @@ fn one_pass(input:&str, bitrate:f64) {
 }
 
 fn two_pass(input:&str, bitrate:f64) {
-    println!("2pass");
+
+    let max = bitrate + (bitrate/8.0);
+    let buf = bitrate * 2.0;
+
+    let bits = format!("{:.0}k", bitrate / 1000.0);
+    let maxbits = format!("{:.0}k", max / 1000.0);
+    let bufsize = format!("{:.0}k", buf / 1000.0);
+
+    let status = match Command::new("ffmpeg")
+        .args([
+            "-y", "-i", &input,
+            "-c:v", "h264_nvenc",
+            "-preset", "p4",
+            "-rc", "vbr",
+            "-multipass", "fullres",
+            "-b:v", &bits,
+            "-maxrate", &maxbits,
+            "-bufsize", &bufsize,
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "output2.mp4",
+        ]).status() {
+            Ok(status) => status,
+            Err(error) => {
+                eprintln!("Failed 2 pass: {error}");
+                return;
+            }
+        };
+
 }
 
 fn get_info(input:&str) -> Result<String, String> {
